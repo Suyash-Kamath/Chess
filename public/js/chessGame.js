@@ -3,7 +3,7 @@ const chess = new Chess();
 const boardElement = document.querySelector(".chessboard");
 let draggedPiece = null;
 let sourceSquare = null;
-let playerRole = null; // Set this value to "w" or "b" based on the player's role
+let playerRole = null; // Player's role: 'w', 'b', or null for spectator
 
 const renderBoard = () => {
   const board = chess.board();
@@ -30,14 +30,16 @@ const renderBoard = () => {
         pieceElement.innerText = getPieceUnicode(square); // Add piece Unicode
         pieceElement.draggable = playerRole === square.color;
 
+        // Drag start event
         pieceElement.addEventListener("dragstart", (e) => {
           if (pieceElement.draggable) {
             draggedPiece = pieceElement;
             sourceSquare = { row: rowIndex, col: squareIndex };
-            e.dataTransfer.setData("text/plain", "");
+            e.dataTransfer.setData("text/plain", ""); // Required for drag-and-drop to work
           }
         });
 
+        // Drag end event
         pieceElement.addEventListener("dragend", () => {
           draggedPiece = null;
           sourceSquare = null;
@@ -46,10 +48,12 @@ const renderBoard = () => {
         squareElement.appendChild(pieceElement);
       }
 
+      // Allow drop on empty or occupied squares
       squareElement.addEventListener("dragover", (e) => {
         e.preventDefault();
       });
 
+      // Drop event to handle moves
       squareElement.addEventListener("drop", (e) => {
         e.preventDefault();
         if (draggedPiece) {
@@ -61,56 +65,61 @@ const renderBoard = () => {
         }
       });
 
-      boardElement.appendChild(squareElement); // Append the correct DOM element
+      boardElement.appendChild(squareElement);
     });
   });
 };
 
 const handleMove = (source, target) => {
-    const move = {
-        from: `${String.fromCharCode(97 + source.col)}${8 - source.row}`,
-        to: `${String.fromCharCode(97 + target.col)}${8 - target.row}`,
-        promotion: 'q', // Automatically promote to queen
-      };
-      const result = chess.move(move);
+  const move = {
+    from: `${String.fromCharCode(97 + source.col)}${8 - source.row}`,
+    to: `${String.fromCharCode(97 + target.col)}${8 - target.row}`,
+    promotion: "q", // Automatically promote to queen
+  };
 
-      socket.emit("move",move)
+  // Validate move before sending to server
+  const result = chess.move(move);
+  if (result) {
+    socket.emit("move", move); // Send move to the server
+    renderBoard();
+  } else {
+    console.log("Invalid move:", move);
+  }
 };
 
 const getPieceUnicode = (piece) => {
   const unicodePieces = {
-    p: "\u2659", // Pawn
-    r: "\u2656", // Rook
-    n: "\u2658", // Knight
-    b: "\u2657", // Bishop
-    q: "\u2655", // Queen
-    k: "\u2654", // King
+    p: { w: "\u2659", b: "\u265F" }, // Pawn
+    r: { w: "\u2656", b: "\u265C" }, // Rook
+    n: { w: "\u2658", b: "\u265E" }, // Knight
+    b: { w: "\u2657", b: "\u265D" }, // Bishop
+    q: { w: "\u2655", b: "\u265B" }, // Queen
+    k: { w: "\u2654", b: "\u265A" }, // King
   };
 
-  return unicodePieces[piece.type] || ""
+  return unicodePieces[piece.type][piece.color];
 };
 
-socket.on("playerRole",(role)=>{
-    playerRole = role;
-    renderBoard();
-})
+// Socket event listeners
+socket.on("playerRole", (role) => {
+  playerRole = role; // Set player role ('w' or 'b')
+  renderBoard();
+});
 
-socket.on("spectatorRole",()=>{
-    playerRole = null;
-    renderBoard();
-})
+socket.on("spectatorRole", () => {
+  playerRole = null; // Spectator cannot move pieces
+  renderBoard();
+});
 
-socket.on("boardState",(FEN)=>{
-    chess.load(FEN);
-    renderBoard();
-})
-// Socket listener for opponent's move
+socket.on("boardState", (FEN) => {
+  chess.load(FEN); // Load board state from server
+  renderBoard();
+});
+
 socket.on("move", (move) => {
-    chess.move(move);
-    renderBoard();
-  });
-  
-// Ensure to call renderBoard initially
+  chess.move(move); // Update board with opponent's move
+  renderBoard();
+});
+
+// Initial render
 renderBoard();
-
-
